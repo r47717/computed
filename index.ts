@@ -1,25 +1,33 @@
-const LOGGING = false;
+type ValueType = number;
+
+/*
+ * Global state
+ */
 
 interface IGlobalState {
-    computing: Derivation | null;
+    computing: IDerivation | null;
 }
 
 const globalState: IGlobalState = {
     computing: null,
 };
 
-type ValueType = number;
 
-class Observable {
-    private observers = new Set<Derivation>();
+/*
+ * Observable
+ */
+
+interface IObservable {
+}
+
+class Observable implements IObservable {
+    private observers = new Set<IDerivation>();
 
     constructor(private value: ValueType = 0) {
     }
 
     get() {
-        LOGGING && console.log('observable get');
         if (globalState.computing && !this.observers.has(globalState.computing)) {
-            LOGGING && console.log('new observer found and added');
             this.observers.add(globalState.computing);
         }
         return this.value;
@@ -28,15 +36,22 @@ class Observable {
     set(val: ValueType) {
         if (val === this.value) return;
         this.value = val;
-        LOGGING && console.log('observable set');
-        this.observers.forEach((item: Derivation) => {
-            LOGGING && console.log('observable sends update to observer');
+        this.observers.forEach((item: IDerivation) => {
             item.update(this);
         });
     }
 }
 
-class Derivation extends Observable {
+
+/*
+ * Derivation
+ */
+
+interface IDerivation {
+    update(updated: IObservable): void;
+}
+
+class Derivation extends Observable implements IDerivation {
 
     constructor(private func: () => ValueType) {
         super();
@@ -49,14 +64,42 @@ class Derivation extends Observable {
         globalState.computing = null;
     }
 
-    update(updated: Observable): void {
-        LOGGING && console.log('observer got update request from one of observables... computing');
+    update(updated: IObservable): void {
         this.compute();
     }
 }
 
+
+/*
+ * Reaction
+ */
+
+class Reaction implements IDerivation {
+    constructor(private func: () => any) {
+        this.run();
+    }
+
+    run() {
+        globalState.computing = this;
+        this.func();
+        globalState.computing = null;
+    }
+
+    update(updated: IObservable): void {
+        this.run();
+    }
+}
+
+
+/*
+ * API
+ */
+
 const observable = (value: ValueType): Observable => new Observable(value);
 const computed = (func: () => ValueType): Derivation => new Derivation(func);
+const autorun = (func: () => any): void => {
+    new Reaction(func);
+};
 
 
 /////// tests ///////
@@ -67,8 +110,9 @@ const hours = computed(() => days.get() * 24);
 const minutes = computed(() => hours.get() * 60);
 const seconds = computed(() => minutes.get() * 60);
 
+autorun(() => console.log(seconds.get()));
+
 for (let i = 0; i < 10; i++) {
     days.set(days.get() + 1);
-    console.log(days.get(), hours.get(), minutes.get(), seconds.get());
 }
 
